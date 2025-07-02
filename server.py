@@ -1,8 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from transformers import BartTokenizer, BartForConditionalGeneration
+from transformers import pipeline
 from newspaper import Article
-import torch
 import nltk
 import logging
 from hashlib import sha256
@@ -16,35 +15,22 @@ logger = logging.getLogger(__name__)
 # Download necessary NLTK data
 nltk.download('punkt')
 
-# Load BART model and tokenizer from local directory
+# Load summarization pipeline from Hugging Face Hub
 try:
-    model_path = "./bart-large-cnn"
-    tokenizer = BartTokenizer.from_pretrained(model_path)
-    model = BartForConditionalGeneration.from_pretrained(model_path)
-    logger.info("✅ Loaded BART model from local path")
+    summarizer = pipeline("summarization", model="facebook/bart-large-cnn", tokenizer="facebook/bart-large-cnn")
+    logger.info("✅ Loaded BART model from Hugging Face Hub")
 except Exception as e:
     logger.error(f"❌ Failed to load BART model: {e}")
-    tokenizer = None
-    model = None
+    summarizer = None
 
 # Constants
 MAX_INPUT_TOKENS = 1024
 summary_cache = {}
 
-def summarize_text(text, max_output=150):
-    inputs = tokenizer(text, return_tensors="pt", max_length=MAX_INPUT_TOKENS, truncation=True)
-    summary_ids = model.generate(
-        inputs["input_ids"],
-        max_length=max_output,
-        min_length=60,
-        length_penalty=2.0,
-        num_beams=4,
-        no_repeat_ngram_size=3,
-        early_stopping=True
-    )
-    return tokenizer.decode(summary_ids[0], skip_special_tokens=True)
-
 def chunk_text_by_token_limit(text):
+    from transformers import BartTokenizer
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+    
     sentences = nltk.sent_tokenize(text)
     chunks = []
     current_chunk = ""
@@ -63,15 +49,13 @@ def chunk_text_by_token_limit(text):
     logger.info(f"📚 Split into {len(chunks)} chunks")
     return chunks
 
-
 @app.route('/bart_summarize', methods=['POST'])
-
 def bart_summarize():
-    if not model or not tokenizer:
+    if not summarizer:
         return jsonify({"error": "Model not available"}), 503
 
     data = request.get_json()
-    url = data.get("url", "")
+    url = data.get("url", "").strip()
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
@@ -89,24 +73,20 @@ def bart_summarize():
         if not text.strip():
             return jsonify({"error": "No readable content found"}), 400
 
-        inputs = tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=1024, truncation=True)
-        summary_ids = model.generate(
-            inputs,
-            max_length=150,
-            min_length=40,
-            length_penalty=2.0,
-            num_beams=4,
-            early_stopping=True
-        )
-        summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+        chunks = chunk_text_by_token_limit(text)
+        summaries = []
 
+        for chunk in chunks:
+            result = summarizer(chunk, max_length=150, min_length=60, do_sample=False)
+            summaries.append(result[0]['summary_text'])
+
+        summary = " ".join(summaries)
         summary_cache[url_hash] = summary
         return jsonify({"summary": summary})
 
     except Exception as e:
-        logger.error(f"BART summarization failed: {e}")
+        logger.exception("❌ BART summarization failed")
         return jsonify({"error": "Summarization failed", "details": str(e)}), 500
-
 
 @app.route('/healthz')
 def health():
