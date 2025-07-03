@@ -49,7 +49,7 @@ def chunk_text_by_token_limit(text):
     logger.info(f"📚 Split into {len(chunks)} chunks")
     return chunks
 
-@app.route('/bart_summarize', methods=['POST'])
+@app.route('/bart-summarize', methods=['POST'])
 def bart_summarize():
     if not summarizer:
         return jsonify({"error": "Model not available"}), 503
