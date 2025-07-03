@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 nltk.download('punkt')
+nltk.download('punkt_tab')
 
 # Ensure punkt tokenizer data is available
 try:

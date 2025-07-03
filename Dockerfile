@@ -16,7 +16,7 @@ COPY requirements.txt .
 
 RUN pip install --upgrade pip && pip install -r requirements.txt && pip list && python -c "import nltk"
 
-RUN python -m nltk.downloader punkt
+RUN python -m nltk.downloader punkt punkt_tab
 
 COPY . .
 
