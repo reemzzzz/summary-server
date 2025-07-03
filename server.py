@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify 
 from flask_cors import CORS
 from transformers import pipeline
 from newspaper import Article
@@ -12,8 +12,11 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Download necessary NLTK data
-nltk.download('punkt')
+# Ensure punkt tokenizer data is available
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 
 # Load summarization pipeline from Hugging Face Hub
 try:
@@ -23,7 +26,6 @@ except Exception as e:
     logger.error(f"❌ Failed to load BART model: {e}")
     summarizer = None
 
-# Constants
 MAX_INPUT_TOKENS = 1024
 summary_cache = {}
 
@@ -36,6 +38,7 @@ def chunk_text_by_token_limit(text):
     current_chunk = ""
 
     for sent in sentences:
+        sent = sent.strip()
         tentative_chunk = current_chunk + " " + sent if current_chunk else sent
         input_ids = tokenizer.encode(tentative_chunk, truncation=False)
         if len(input_ids) < MAX_INPUT_TOKENS:
@@ -78,11 +81,14 @@ def bart_summarize():
 
         for chunk in chunks:
             result = summarizer(chunk, max_length=150, min_length=60, do_sample=False)
-            summaries.append(result[0]['summary_text'])
+            summary_text = result[0]['summary_text'].strip()
+            # You can split summary_text by sentences if you want bullet points
+            summaries.append(summary_text)
 
-        summary = " ".join(summaries)
-        summary_cache[url_hash] = summary
-        return jsonify({"summary": summary})
+        # Cache the summary as a list of points (bullet points)
+        summary_cache[url_hash] = summaries
+
+        return jsonify({"summary": summaries})
 
     except Exception as e:
         logger.exception("❌ BART summarization failed")
