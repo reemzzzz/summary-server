@@ -5,6 +5,9 @@ from newspaper import Article
 import nltk
 import logging
 from hashlib import sha256
+from bs4 import BeautifulSoup
+import requests
+
 
 # Setup Flask and logging
 app = Flask(__name__)
@@ -78,9 +81,24 @@ def bart_summarize():
         text = article.text
 
         if not text.strip():
-            return jsonify({"error": "No readable content found"}), 400
+            # logger.warning(f"⚠️ Empty article text for URL: {url}")
+            # return jsonify({"error": "No readable content found"}), 400
+            logger.warning("⚠️ newspaper3k failed. Trying fallback with BeautifulSoup.")
+            try:
+                html = requests.get(url).text
+                soup = BeautifulSoup(html, "html.parser")
+                paragraphs = soup.find_all("p")
+                fallback_text = "\n".join(p.get_text() for p in paragraphs)
+                if fallback_text.strip():
+                    text = fallback_text
+                else:
+                    return jsonify({"error": "No readable content found"}), 400
+            except Exception as fallback_error:
+                return jsonify({"error": "Fallback extractor failed", "details": str(fallback_error)}), 500
 
-        chunks = chunk_text_by_token_limit(text)
+
+
+        chunk= chunk_text_by_token_limit(text)
         summaries = []
 
         for chunk in chunks:
