@@ -12,6 +12,9 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+nltk.download('punkt')
+
 # Ensure punkt tokenizer data is available
 try:
     nltk.data.find('tokenizers/punkt')
